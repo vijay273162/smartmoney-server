@@ -8,6 +8,7 @@ app.use(express.json());
 
 const DHAN_CLIENT_ID = process.env.DHAN_CLIENT_ID;
 const DHAN_ACCESS_TOKEN = process.env.DHAN_ACCESS_TOKEN;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 const DHAN_HEADERS = {
   "Content-Type": "application/json",
@@ -28,8 +29,12 @@ app.post("/ltp", async (req, res) => {
       headers: DHAN_HEADERS,
       body: JSON.stringify(req.body),
     });
-    const data = await response.json();
-    res.json(data);
+    const text = await response.text();
+    try {
+      res.json(JSON.parse(text));
+    } catch {
+      res.status(500).json({ error: "Dhan LTP parse error", raw: text });
+    }
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch LTP", detail: err.message });
   }
@@ -43,25 +48,38 @@ app.post("/historical", async (req, res) => {
       headers: DHAN_HEADERS,
       body: JSON.stringify(req.body),
     });
-    const data = await response.json();
-    res.json(data);
+    const text = await response.text();
+    try {
+      res.json(JSON.parse(text));
+    } catch {
+      res.status(500).json({ error: "Dhan historical parse error", raw: text });
+    }
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch historical data", detail: err.message });
   }
 });
 
-// Market quote (full)
-app.post("/quote", async (req, res) => {
+// Claude AI - generate trading calls
+app.post("/ai/calls", async (req, res) => {
   try {
-    const response = await fetch("https://api.dhan.co/v2/marketfeed/quote", {
+    const { prompt } = req.body;
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: DHAN_HEADERS,
-      body: JSON.stringify(req.body),
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }],
+      }),
     });
     const data = await response.json();
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch quote", detail: err.message });
+    res.status(500).json({ error: "Claude API failed", detail: err.message });
   }
 });
 
